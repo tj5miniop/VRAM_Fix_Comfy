@@ -14,10 +14,9 @@ def apply_memory_patch(vram_gb, ram_gb):
     vram_bytes = vram_gb * 1024 * 1024 * 1024
     ram_bytes = ram_gb * 1024 * 1024 * 1024
     
-    # 1. The "Flexible Return" function
+    # Hopefully fixes relevant error - cannot unpack non-iterable int object
     # This handles cases where ComfyUI expects a single int OR a tuple (free, total)
     def universal_memory_return(*args, **kwargs):
-        # If the code tries to do 'free, total = get_stats()', this allows it
         class MemoryTuple(int):
             def __iter__(self):
                 return iter((vram_bytes, vram_bytes))
@@ -25,8 +24,7 @@ def apply_memory_patch(vram_gb, ram_gb):
                 return vram_bytes
         return MemoryTuple(vram_bytes)
 
-    # 2. Targeted Overwrites
-    # We overwrite every possible function ComfyUI uses to check memory
+    # Overwrite every possible function ComfyUI uses to check memory
     target_functions = [
         'get_free_memory',
         'get_total_memory',
@@ -38,23 +36,20 @@ def apply_memory_patch(vram_gb, ram_gb):
         if hasattr(mm, func_name):
             setattr(mm, func_name, universal_memory_return)
 
-    # 3. Patch Global Constants
     # Some logic checks these constants instead of calling functions
     mm.VRAM_TOTAL = vram_bytes
     mm.RAM_TOTAL = ram_bytes
     
-    # 4. Patch the 'Xformers' or 'Cuda' detection if necessary
-    # This prevents the petabyte bug from leaking through the backend check
+    # try patching xformers and CUDA (This may mean that this node will only work for NVIDIA related setups?)
     if hasattr(mm, 'current_protocol'):
         try:
-            # Forcing Comfy to think it's a standard CUDA setup
             mm.vram_state = mm.VRAMState.NORMAL
         except:
             pass
 
     print(f"\n[VRAM Fix] High-Level Patch Applied: {vram_gb}GB VRAM / {ram_gb}GB RAM\n")
 
-# Apply on startup with your specific hardware specs
+# Apply on startup default values; 8GB VRAM 32GB RAM
 try:
     apply_memory_patch(8, 32)
 except Exception as e:
