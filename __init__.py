@@ -1,63 +1,67 @@
 import logging
+import torch
 
-# We import this inside the class or method to avoid initialization race conditions
 def get_mm():
     try:
         import comfy.model_management as mm
         return mm
     except ImportError:
-        # Fallback for different directory structures
         from comfy import model_management as mm
         return mm
 
-class VRAMOverrideNode:
-    def __init__(self):
-        pass
+def apply_memory_patch(vram_gb, ram_gb):
+    mm = get_mm()
+    vram_bytes = vram_gb * 1024 * 1024 * 1024
     
+    # Add overrides
+    def get_free_memory_override(*args, **kwargs):
+        return vram_bytes
+
+    def get_total_memory_override(*args, **kwargs):
+        return vram_bytes
+            
+    def get_vram_max_free_lib_override(*args, **kwargs):
+        return vram_bytes
+
+    # Apply to the core module
+    mm.get_free_memory = get_free_memory_override
+    mm.get_total_memory = get_total_memory_override
+    
+    if hasattr(mm, 'get_vram_max_free_lib'):
+        mm.get_vram_max_free_lib = get_vram_max_free_lib_override
+    
+    # Force ComfyUI's internal constants to refresh if they exist
+    if hasattr(mm, 'VRAM_TOTAL'):
+        mm.VRAM_TOTAL = vram_bytes
+        
+    print(f"\n[VRAM Fix] Patch applied: Memory set to {vram_gb}GB\n")
+
+# --- INITIALIZE ON STARTUP ---
+# Defaults will be 8GB VRAM 32 GB RAM - Feel free to change this locally or on a fork
+try:
+    apply_memory_patch(8, 32)
+except Exception as e:
+    print(f"[VRAM Fix] Startup patch failed: {e}")
+# Code above will result in an error incase the patch fails
+
+class VRAMOverrideNode:
     @classmethod
     def INPUT_TYPES(s):
         return {
             "required": {
-                "vram_gb": ("INT", {"default": 8, "min": 1, "max": 128, "step": 1}),
-                "ram_gb": ("INT", {"default": 32, "min": 1, "max": 512, "step": 1}),
-                "mode": (["Enabled", "Disabled"],),
+                "vram_gb": ("INT", {"default": 8, "min": 1, "max": 128}),
+                "ram_gb": ("INT", {"default": 32, "min": 1, "max": 512}),
             },
         }
 
     RETURN_TYPES = ()
-    FUNCTION = "apply_override"
+    FUNCTION = "manual_patch"
     CATEGORY = "custom_fixes"
     OUTPUT_NODE = True
 
-    def apply_override(self, vram_gb, ram_gb, mode):
-        if mode == "Disabled":
-            return ()
-
-        mm = get_mm()
-        
-        # Convert GB to Bytes
-        vram_bytes = vram_gb * 1024 * 1024 * 1024
-
-        # Patching the functions
-        # We use 'unused_arg' because Comfy calls these with a device argument
-        def get_free_memory_override(device=None):
-            return vram_bytes
-
-        def get_total_memory_override(device=None):
-            return vram_bytes
-
-        # Apply the monkey patch
-        mm.get_free_memory = get_free_memory_override
-        mm.get_total_memory = get_total_memory_override
-        
-        print(f"\n[VRAM Fix] Manual Override: {vram_gb}GB VRAM ({vram_bytes} bytes)\n")
+    def manual_patch(self, vram_gb, ram_gb):
+        apply_memory_patch(vram_gb, ram_gb)
         return ()
 
-# Important: These must be outside the class
-NODE_CLASS_MAPPINGS = {
-    "VRAMOverrideNode": VRAMOverrideNode
-}
-
-NODE_DISPLAY_NAME_MAPPINGS = {
-    "VRAMOverrideNode": "VRAM/RAM Manual Override"
-}
+NODE_CLASS_MAPPINGS = {"VRAMOverrideNode": VRAMOverrideNode}
+NODE_DISPLAY_NAME_MAPPINGS = {"VRAMOverrideNode": "VRAM/RAM Manual Override"}
