@@ -12,37 +12,53 @@ def get_mm():
 def apply_memory_patch(vram_gb, ram_gb):
     mm = get_mm()
     vram_bytes = vram_gb * 1024 * 1024 * 1024
+    ram_bytes = ram_gb * 1024 * 1024 * 1024
     
-    # Add overrides
-    def get_free_memory_override(*args, **kwargs):
-        return vram_bytes
+    # 1. The "Flexible Return" function
+    # This handles cases where ComfyUI expects a single int OR a tuple (free, total)
+    def universal_memory_return(*args, **kwargs):
+        # If the code tries to do 'free, total = get_stats()', this allows it
+        class MemoryTuple(int):
+            def __iter__(self):
+                return iter((vram_bytes, vram_bytes))
+            def __getitem__(self, index):
+                return vram_bytes
+        return MemoryTuple(vram_bytes)
 
-    def get_total_memory_override(*args, **kwargs):
-        return vram_bytes
-            
-    def get_vram_max_free_lib_override(*args, **kwargs):
-        return vram_bytes
+    # 2. Targeted Overwrites
+    # We overwrite every possible function ComfyUI uses to check memory
+    target_functions = [
+        'get_free_memory',
+        'get_total_memory',
+        'get_vram_max_free_lib',
+        'get_torch_memory_stats'
+    ]
 
-    # Apply to the core module
-    mm.get_free_memory = get_free_memory_override
-    mm.get_total_memory = get_total_memory_override
+    for func_name in target_functions:
+        if hasattr(mm, func_name):
+            setattr(mm, func_name, universal_memory_return)
+
+    # 3. Patch Global Constants
+    # Some logic checks these constants instead of calling functions
+    mm.VRAM_TOTAL = vram_bytes
+    mm.RAM_TOTAL = ram_bytes
     
-    if hasattr(mm, 'get_vram_max_free_lib'):
-        mm.get_vram_max_free_lib = get_vram_max_free_lib_override
-    
-    # Force ComfyUI's internal constants to refresh if they exist
-    if hasattr(mm, 'VRAM_TOTAL'):
-        mm.VRAM_TOTAL = vram_bytes
-        
-    print(f"\n[VRAM Fix] Patch applied: Memory set to {vram_gb}GB\n")
+    # 4. Patch the 'Xformers' or 'Cuda' detection if necessary
+    # This prevents the petabyte bug from leaking through the backend check
+    if hasattr(mm, 'current_protocol'):
+        try:
+            # Forcing Comfy to think it's a standard CUDA setup
+            mm.vram_state = mm.VRAMState.NORMAL
+        except:
+            pass
 
-# --- INITIALIZE ON STARTUP ---
-# Defaults will be 8GB VRAM 32 GB RAM - Feel free to change this locally or on a fork
+    print(f"\n[VRAM Fix] High-Level Patch Applied: {vram_gb}GB VRAM / {ram_gb}GB RAM\n")
+
+# Apply on startup with your specific hardware specs
 try:
     apply_memory_patch(8, 32)
 except Exception as e:
-    print(f"[VRAM Fix] Startup patch failed: {e}")
-# Code above will result in an error incase the patch fails
+    print(f"[VRAM Fix] Startup injection failed: {e}")
 
 class VRAMOverrideNode:
     @classmethod
@@ -56,7 +72,7 @@ class VRAMOverrideNode:
 
     RETURN_TYPES = ()
     FUNCTION = "manual_patch"
-    CATEGORY = "custom_fixes"
+    CATEGORY = "fixes"
     OUTPUT_NODE = True
 
     def manual_patch(self, vram_gb, ram_gb):
