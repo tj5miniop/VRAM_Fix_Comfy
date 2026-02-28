@@ -1,0 +1,15 @@
+# pyproject.toml
+[project]
+name = "VRAM-Fix-ComfyUI" # Unique identifier for your node. Immutable after creation.
+description = "A useful node utility which allows for the managing of RAM and VRAM allocation; great for multitasking and avoiding OOM's. Only tested officially on Nvidia CUDA but everything else should work (AMD,CPU,MAC etc)"
+version = "1.0.0" # Custom Node version. Must be semantically versioned.
+license = { file = "LICENSE" }
+dependencies  = [] # Filled in from requirements.txt
+
+[project.urls]
+Repository = "https://github.com/tj5miniop/VRAM_Fix_Comfy/"
+
+[tool.comfy]
+PublisherId = "Tj5miniop" 
+DisplayName = "VRAM FIX COMFY" # Display name for the Custom Node. Can be changed later.
+Icon = "https://example.com/icon.png" # SVG, PNG, JPG or GIF (MAX. 800x400px)
