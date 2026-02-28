@@ -10,6 +10,6 @@ dependencies  = [] # Filled in from requirements.txt
 Repository = "https://github.com/tj5miniop/VRAM_Fix_Comfy/"
 
 [tool.comfy]
-PublisherId = "Tj5miniop" 
+PublisherId = "tj5miniop-nodes" 
 DisplayName = "VRAM FIX COMFY" # Display name for the Custom Node. Can be changed later.
 Icon = "https://raw.githubusercontent.com/tj5miniop/VRAM_Fix_Comfy/refs/heads/main/vram_fix_comfyui.png" # SVG, PNG, JPG or GIF (MAX. 800x400px)
